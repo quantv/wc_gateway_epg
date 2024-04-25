@@ -26,6 +26,13 @@ class WC_Gateway_Epg extends WC_Payment_Gateway
 	 */
 	public $locale;
 
+	private $epg_Url;
+	private $secretkey;
+	private $epg_paymentMethodCode;
+	private $epg_prefix;
+	private $provider_pk;
+	private $epg_client_private_key;
+
 	/**
 	 * Logger instance
 	 *
@@ -56,18 +63,24 @@ class WC_Gateway_Epg extends WC_Payment_Gateway
 		$this->description  = $this->get_option('description');
 		$this->epg_Url  = $this->get_option('epg_Url');
 		$this->secretkey  = $this->get_option('secretkey');
-		$this->epg_clientPrivateKey  = $this->get_option('epg_clientPrivateKey');
+		
 		$this->epg_paymentMethodCode  = $this->get_option('epg_paymentMethodCode');
 		$this->epg_prefix  = $this->get_option('epg_prefix');
 		$this->locale  = $this->get_option('locale');
 		$this->provider_pk = $this->get_public_key($this->epg_Url);
 		
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
+		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'save_private_key' ));
 		add_action('woocommerce_thankyou_epg', array($this, 'thankyou_page'));
 		add_action( 'woocommerce_api_wc_gateway_epg', array( $this, 'check_ipn_response' ) );
 
-		if ($this->epg_clientPrivateKey){
-			$this->epg_clientPrivateKey = "-----BEGIN RSA PRIVATE KEY-----\n" . $this->epg_clientPrivateKey . "\n-----END RSA PRIVATE KEY-----";
+		$pk_pem = get_option('epg_client_private_key');
+		if ($pk_pem){
+			try{
+				$this->epg_client_private_key = openssl_pkey_get_private($pk_pem);
+			}catch(Exception $e){
+				error_log($e);
+			}
 		}
 	}
 
@@ -157,12 +170,8 @@ Ew6SuGm9ATqLA88o/mwfio1zbdgmZnlyEox2gOAhXhGHMmcVuwUfHjeUo2tPqYcD
                 'default' => '',
                 'desc_tip' => true
             ),
-            'epg_clientPrivateKey' => array(
-                'title' => __('Private key', 'woocommerce'),
-                'type' => 'password',
-                'description' => 'Private Key',
-                'default' => '',
-                'desc_tip' => true
+            'epg_client_private_key' => array(
+                'type' => 'privatekey'
             ),
             'epg_paymentMethodCode' => array(
                 'title' => __('Mã phương thức thanh toán', 'woocommerce'),
@@ -209,6 +218,71 @@ Ew6SuGm9ATqLA88o/mwfio1zbdgmZnlyEox2gOAhXhGHMmcVuwUfHjeUo2tPqYcD
                 )
             ),
 		);
+	}
+
+	/**
+	 * Generate private key html.
+	 *
+	 * @return string
+	 */
+	public function generate_privatekey_html() {
+		ob_start();
+		$pem = 'NO_KEY';
+		if (isset($this->epg_client_private_key) && $this->epg_client_private_key){
+			$pem = openssl_pkey_get_details($this->epg_client_private_key)['key'];
+		}
+		?>
+		<tr valign="top">
+			<th scope="row" class="titledesc">
+				<label>
+					<?php esc_html_e( 'Public key:', 'epg' ); ?>
+					<?php echo wp_kses_post( wc_help_tip( __( 'Copy public key để đăng ký với EPG', 'epg' ) ) ); ?>
+				</label>
+			</th>
+			<td class="forminp" id="epg_private_key">
+				<div class="wc_input_table_wrapper">
+					<pre id="epg_client_public_key"><?php echo $pem ?></pre>
+					<textarea class="input-text wide-input" style="display:none" name="epg_client_private_key" rows="15"></textarea>
+					<p>
+						<a href="#" class="gen button"><?php esc_html_e( 'Generate new key pair', 'epg' ); ?></a>
+						<a href="#" class="add button"><?php esc_html_e( 'Add', 'epg' ); ?></a>
+					</p>
+				</div>
+				<script type="text/javascript">
+					jQuery(function() {
+						jQuery('#epg_private_key').on( 'click', 'a.add', function(){
+							//generate new keypair
+							jQuery('#epg_private_key textarea').show();
+							jQuery('#epg_private_key pre').hide();
+							return false;
+						});
+						jQuery('#epg_private_key').on( 'click', 'a.gen', function(){
+							jQuery('#epg_private_key textarea').hide();
+							jQuery('#epg_private_key pre').hide();
+							jQuery('<input type="hidden" name="epg_new_keypair" value="true" />').appendTo('#epg_private_key');
+							return false;
+						});
+					});
+				</script>
+			</td>
+		</tr>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
+	 * Save account details table.
+	 */
+	public function save_private_key() {
+		if ( isset( $_POST['epg_new_keypair'] )) {
+			$keys = openssl_pkey_new(array('private_key_bits' => 2048));
+			if ($keys === false) return;
+			openssl_pkey_export($keys, $privateKey);
+			$res = update_option( 'epg_client_private_key', $privateKey );
+		}else if (isset($_POST['epg_client_private_key'])){
+			$pk   = $_POST['epg_client_private_key'];
+			$res = update_option('epg_client_private_key', $pk );
+		}
 	}
 
 	public function clean_prefix($string){
@@ -361,10 +435,10 @@ Ew6SuGm9ATqLA88o/mwfio1zbdgmZnlyEox2gOAhXhGHMmcVuwUfHjeUo2tPqYcD
         $url = $this->epg_Url . "/" . "payment-request/" . $this->secretkey . "/" . $action;
         $curl = curl_init();
 		curl_setopt($curl, CURLOPT_POST, 1);
-		if ($this->epg_clientPrivateKey){
+		if ($this->epg_client_private_key){
 			$jsdata = json_encode($data);
 			error_log($jsdata);
-			openssl_sign($jsdata, $sign, $this->epg_clientPrivateKey, OPENSSL_ALGO_SHA256);
+			openssl_sign($jsdata, $sign, $this->epg_client_private_key, OPENSSL_ALGO_SHA256);
 			$payload = json_encode(array(
 				'data' => $jsdata,
 				'signature' => base64_encode($sign),

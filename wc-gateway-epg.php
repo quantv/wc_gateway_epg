@@ -8,7 +8,7 @@
  * Author URI: 
  * Text Domain: epg
  * Domain Path: /languages
- * Version: 0.0.1
+ * Version: 0.0.3
  * License: GNU General Public License v3.0
  */
 
