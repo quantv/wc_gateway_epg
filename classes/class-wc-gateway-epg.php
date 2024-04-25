@@ -245,11 +245,20 @@ Ew6SuGm9ATqLA88o/mwfio1zbdgmZnlyEox2gOAhXhGHMmcVuwUfHjeUo2tPqYcD
 					<textarea class="input-text wide-input" style="display:none" name="epg_client_private_key" rows="15"></textarea>
 					<p>
 						<a href="#" class="gen button"><?php esc_html_e( 'Generate new key pair', 'epg' ); ?></a>
+						&nbsp;
 						<a href="#" class="add button"><?php esc_html_e( 'Add', 'epg' ); ?></a>
+						&nbsp;
+						<a href="#" class="copy button"><?php esc_html_e( 'Copy', 'epg' ); ?></a>
 					</p>
 				</div>
 				<script type="text/javascript">
 					jQuery(function() {
+						jQuery('#epg_private_key').on( 'click', 'a.copy', function(){
+							const copyText = document.getElementById("epg_client_public_key").textContent;
+							navigator.clipboard.writeText(copyText);
+							alert('Public key copied');
+							return false;
+						});
 						jQuery('#epg_private_key').on( 'click', 'a.add', function(){
 							//generate new keypair
 							jQuery('#epg_private_key textarea').show();
