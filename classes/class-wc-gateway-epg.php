@@ -347,7 +347,13 @@ Ew6SuGm9ATqLA88o/mwfio1zbdgmZnlyEox2gOAhXhGHMmcVuwUfHjeUo2tPqYcD
         $order->add_order_note(__('Giao dịch chờ thanh toán hoặc chưa hoàn tất', 'woocommerce'));
         $si = $this->generateRandomString(10);
         
-		$guid = $this->epg_prefix.$order_id;
+		//su dung request id khac nhau cho don hang admin va frontend.
+		$source_type = $order->get_meta('_wc_order_attribution_source_type');
+		if ($source_type != 'admin'){
+			$guid = 'T'.$this->epg_prefix.$order_id;
+		}else{
+			$guid = 'A'.$this->epg_prefix.$order_id;
+		}
 		update_post_meta($order_id, 'epg_success_indicator', $si);
         update_post_meta($order_id, 'epg_request_id', $guid);
         
